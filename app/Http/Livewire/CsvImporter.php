@@ -2,39 +2,67 @@
 
 namespace App\Http\Livewire;
 
+use App\Helper\ChunkIterator;
+use App\Models\Customer;
+use App\Models\Import;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use League\Csv\Reader;
+use League\Csv\Statement;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
 class CsvImporter extends Component
 {
     use WithFileUploads;
-    private $maxFileSize = 1024 * 50;
+    private $maxFileSize = 1024 * 170;
     public $modelClass;
     public $model;
     public $csv;
-    public $headerInput = [];
-    public $headerColumns = [];
+    public $headersfile= [];
+    public $columns = [];
+    public $hasFilledData = false;
+
+    const REQUIRED_COLUMNS = ['id', 'email'];
+
+    public function render()
+    {
+        $this->hasFilledData = $this->hasFilledData();
+
+        return view('livewire.csv-importer');
+    }
+
+    protected function getValidationAttributes()
+    {
+        return collect($this->buildRuleRequiredForRequiredColumn())->mapWithKeys(function ($value, $column){
+            $correctName = Str::of($column)->after('.')->toString();
+            return [$column => $correctName];
+        })->toArray();
+    }
 
     public function updatedCsv()
     {
         $this->validateOnly('csv');
+        $csv = $this->csvReader;
+        $this->headersfile = $csv->getHeader();
 
-        if ($handle = fopen($this->csv->getRealPath(), "r")) {
-            $this->headerColumns = fgetcsv($handle, 1000, ",");
-//            $this->headerInput = $this->headerColumns;
-        }
+        $this->columns = collect(Schema::getColumnListing('customers'))
+            ->mapWithKeys(fn($column) => [$column => ''])
+            ->only(['id', 'first_name', 'last_name', 'email'])
+            ->toArray();
     }
 
-    protected function rules()
+    public function getCsvReaderProperty()
     {
-        $maxFileSize = $this->maxFileSize;
-        $values = implode(',',$this->headerColumns);
-        return [
-            'csv' => ['required', 'file', 'mimes:csv', "max:$maxFileSize"],
-//            'headerInput.*' => "nullable|array:$values",
-            'headerInput' => "required"
-        ];
+        $csv = Reader::createFromStream(fopen($this->csv->getRealPath(), "r"));
+        $csv->setHeaderOffset(0);
+
+        return $csv;
+    }
+
+    public function getCsvRecordsProperty()
+    {
+        return Statement::create()->process($this->csvReader);
     }
 
     public function updated($propertyName)
@@ -42,21 +70,75 @@ class CsvImporter extends Component
         $this->validateOnly($propertyName);
     }
 
+    protected function rules()
+    {
+        $maxFileSize = $this->maxFileSize;
+        $values = implode(',', $this->headersfile);
+
+        return [
+            'csv' => ['required', 'file', 'mimes:csv', "max:$maxFileSize"],
+//            'headerInput.*' => "nullable|array:$values",
+            'columns.*' => ["in:$values"]
+        ] + $this->buildRuleRequiredForRequiredColumn();
+    }
+
+    private function buildRuleRequiredForRequiredColumn()
+    {
+        $result = [];
+        foreach (self::REQUIRED_COLUMNS as $column){
+            $result["columns.$column"] = 'required';
+        }
+
+        return $result;
+    }
+
+    private function hasFilledData()
+    {
+        foreach ($this->columns as $column => $value) {
+            if ($value) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     public function import()
     {
-        $validatedData = $this->validate();
-        dd($validatedData);
+        $this->validate();
+        auth()->user()->imports()->create([
+            'model' => $this->modelClass,
+            'file_path' => $this->csv->getRealPath(),
+            'file_name' => $this->csv->getClientOriginalName(),
+            'total_rows' => count($this->csvRecords),
+            'processed_rows' => 0
+        ]);
+        $this->emitTo(ProgressBar::class, 'showProgressBar');
+        $chunkIterator = new ChunkIterator($this->csvRecords->getRecords(), 100);
+        $processedRows = 0;
+        foreach ($chunkIterator->get() as $chunk) {
+            $chunkData = collect($chunk)->map(function ($record){
+                unset($record['id']);
+                return $record;
+            })->toArray();
+
+            Customer::upsert($chunkData, ['email'], ['first_name', 'last_name', 'company', 'vip', 'birthday']);
+            $processedRows += 100;
+            $import = Import::query()->where('model', $this->modelClass)->latest()->first();
+            $import->update([
+                'processed_rows' => $processedRows
+            ]);
+        }
+
+        if (isset($import)){
+            $import->delete();
+        }
+
     }
 
     public function mount($modelClass)
     {
         $fragments = explode('\\', $modelClass);
         $this->model =  $fragments[count($fragments) - 1];
-    }
-
-    public function render()
-    {
-        return view('livewire.csv-importer');
     }
 }

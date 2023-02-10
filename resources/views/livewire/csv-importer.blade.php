@@ -1,12 +1,13 @@
+
 <div class="relative z-10" x-data="handleDrop()">
     <div class="fixed inset-0"></div>
-
     <div class="fixed inset-0 overflow-hidden opacity-90 bg-gray-700">
         <div class="absolute inset-0 overflow-hidden">
             <div class="pointer-events-none fixed inset-y-0 right-0 flex max-w-full pl-10 sm:pl-16" @click.outside.window="open = false">
                 <div class="pointer-events-auto w-screen max-w-md">
-                    <form class="flex h-full flex-col divide-y divide-gray-200 bg-white shadow-xl">
+                    <form wire:submit.prevent="import" class="flex h-full flex-col divide-y divide-gray-200 bg-white shadow-xl">
                         <div class="py-6 px-4 sm:px-6">
+                            @json($errors)
                             <div class="flex items-center justify-between">
                                 <h2 class="text-lg font-medium">Import {{$model}}</h2>
                                 <div class="ml-3 flex h-7 items-center">
@@ -37,9 +38,7 @@
                                                 <div class="flex text-sm text-gray-600">
                                                     <label for="file" class="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500">
                                                         <span>Upload a file</span>
-                                                        <input wire:model="csv" id="file" name="file" type="file" class="sr-only"
-
-                                                              >
+                                                        <input wire:model="csv" id="file" name="file" type="file" class="sr-only">
                                                     </label>
                                                     <p class="pl-1">or drag and drop</p>
                                                 </div>
@@ -59,22 +58,24 @@
 
                                         <div class="mt-4 space-y-5">
                                             {{-- Foreach columns to map --}}
-                                            @foreach($headerColumns as $header)
-                                                <div class="grid grid-cols-4 gap-4 items-start" wire:key="parent_{{$header}}">
+                                            @foreach($columns as $name => $value)
+                                                <div class="grid grid-cols-4 gap-4 items-start" wire:key="parent_{{$name}}">
                                                     <label for="" class="block text-sm font-medium text-gray-700 sm:mt-px sm:pt-2 col-span-1">
-                                                        {{$header}}*
+                                                        {{$name}}
+                                                        @if(in_array($name, \App\Http\Livewire\CsvImporter::REQUIRED_COLUMNS, true)) <span style="color: red">*</span> @endif
                                                     </label>
                                                     <div class="mt-1 sm:mt-0 sm:col-span-3">
-                                                        <select type="text" wire:model="headerInput.{{$header}}" id="" class="max-w-lg block w-full shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:max-w-xs sm:text-sm border-gray-300 rounded-md">
+                                                        <select type="text" wire:model="columns.{{$name}}" id="" class="max-w-lg block w-full shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:max-w-xs sm:text-sm border-gray-300 rounded-md">
                                                             <option value="">Don't import</option>
                                                             {{-- Foreach file headers --}}
-                                                            @foreach($headerColumns as $headerChild)
-                                                                <option wire:key="child_{{$header}} value="{{$headerChild}}">{{$headerChild}}</option>
+                                                            @foreach($headersfile as $header)
+                                                                <option wire:key="child_{{$header}} value="{{$header}}">{{$header}}</option>
                                                             @endforeach
                                                             {{-- End foreach file headers --}}
                                                         </select>
-
-{{--                                                        <span class="mt-2 text-red-500 font-medium text-sm">Validation error</span>--}}
+                                                        @error("columns.$name")
+                                                        <span class="mt-2 text-red-500 font-medium text-sm">{{ $message }}</span>
+                                                        @enderror
                                                     </div>
                                                 </div>
                                             @endforeach
@@ -88,9 +89,12 @@
                         </div>
 
                         {{-- csv-imports component goes here --}}
+                        <div x-show="isShowProgress" wire:key="{{$modelClass}}">
+                            <livewire:progress-bar :modelClass="$modelClass" wire:key="{{$modelClass}}"/>
+                        </div>
 
                         <div class="flex flex-shrink-0 justify-end px-4 py-4">
-                            <button type="submit" class="ml-4 inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50" disabled="disabled">Import</button>
+                            <button type="submit" class="ml-4 inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50" @if(!$hasFilledData) disabled @endif>Import</button>
                         </div>
                     </form>
                 </div>
@@ -102,8 +106,9 @@
             return {
                 isDrop: false,
                 uploadFile: (e) => {
-                    console.log(e)
-                }
+                    @this.upload('csv', event.dataTransfer.files[0])
+                },
+                isShowProgress: false
             }
         }
     </script>
