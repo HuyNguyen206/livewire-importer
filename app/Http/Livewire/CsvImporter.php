@@ -3,8 +3,10 @@
 namespace App\Http\Livewire;
 
 use App\Helper\ChunkIterator;
+use App\Jobs\ImportCSVRecordJob;
 use App\Models\Customer;
 use App\Models\Import;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use League\Csv\Reader;
@@ -113,26 +115,23 @@ class CsvImporter extends Component
             'total_rows' => count($this->csvRecords),
             'processed_rows' => 0
         ]);
-        $this->emitTo(ProgressBar::class, 'showProgressBar');
+//        $this->emitTo(ProgressBar::class, 'showProgressBar');
         $chunkIterator = new ChunkIterator($this->csvRecords->getRecords(), 100);
-        $processedRows = 0;
+        $import = Import::query()->where('model', $this->modelClass)->latest()->first();
         foreach ($chunkIterator->get() as $chunk) {
             $chunkData = collect($chunk)->map(function ($record){
                 unset($record['id']);
                 return $record;
             })->toArray();
-
-            Customer::upsert($chunkData, ['email'], ['first_name', 'last_name', 'company', 'vip', 'birthday']);
-            $processedRows += 100;
-            $import = Import::query()->where('model', $this->modelClass)->latest()->first();
-            $import->update([
-                'processed_rows' => $processedRows
-            ]);
+            dispatch(new ImportCSVRecordJob($chunkData, $import));
+//            $batches[] = new ImportCSVRecordJob($chunkData, $import);
         }
 
-        if (isset($import)){
-            $import->delete();
-        }
+//        Bus::batch($batches)
+//            ->then(function () use ($import){
+//                $import->touch('completed_at');
+//            })
+//           ->dispatch();
 
     }
 

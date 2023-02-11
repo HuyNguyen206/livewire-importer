@@ -7,7 +7,6 @@
                 <div class="pointer-events-auto w-screen max-w-md">
                     <form wire:submit.prevent="import" class="flex h-full flex-col divide-y divide-gray-200 bg-white shadow-xl">
                         <div class="py-6 px-4 sm:px-6">
-                            @json($errors)
                             <div class="flex items-center justify-between">
                                 <h2 class="text-lg font-medium">Import {{$model}}</h2>
                                 <div class="ml-3 flex h-7 items-center">
