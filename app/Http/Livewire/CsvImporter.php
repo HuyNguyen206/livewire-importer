@@ -115,7 +115,7 @@ class CsvImporter extends Component
             'total_rows' => count($this->csvRecords),
             'processed_rows' => 0
         ]);
-//        $this->emitTo(ProgressBar::class, 'showProgressBar');
+        $this->emitTo(ProgressBar::class, 'showProgressBar');
         $chunkIterator = new ChunkIterator($this->csvRecords->getRecords(), 100);
         $import = Import::query()->where('model', $this->modelClass)->latest()->first();
         foreach ($chunkIterator->get() as $chunk) {
@@ -126,7 +126,7 @@ class CsvImporter extends Component
             dispatch(new ImportCSVRecordJob($chunkData, $import));
 //            $batches[] = new ImportCSVRecordJob($chunkData, $import);
         }
-
+        $this->reset(['hasFilledData', 'columns']);
 //        Bus::batch($batches)
 //            ->then(function () use ($import){
 //                $import->touch('completed_at');

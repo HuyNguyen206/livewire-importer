@@ -4,25 +4,29 @@ namespace App\Http\Livewire;
 
 use App\Models\Import;
 use Livewire\Component;
+use Predis\Command\Redis\DUMP;
 
 class ProgressBar extends Component
 {
     public $modelClass;
-    public $isShow = false;
 
-    protected $listeners = ['showProgressBar'];
-
-    public function showProgressBar()
-    {
-        $this->isShow = true;
-        $this->render();
-    }
+    protected $listeners = ['showProgressBar' => '$refresh'];
 
     public function render()
     {
-        $info = Import::query()->where('model', $this->modelClass)->latest()->first();
-        $percentageProcessedRows = $info ? round(($info->processed_rows / $info->total_rows) * 100, 2).'%': 0 .'%';
-        $displayProgress = sprintf('%s/%s', $info->processed_rows ?? 0, $info->total_rows ?? 0);
-        return view('livewire.progress-bar', compact('info', 'percentageProcessedRows', 'displayProgress'));
+        $progresses = [];
+        $info = auth()->user()
+            ->imports()
+            ->inProgress()
+            ->forModel($modelClass = $this->modelClass)
+            ->latest()
+            ->get();
+        $info->each(function ($import) use(&$progresses){
+            $percentageProcessedRows = round(($import->processed_rows / $import->total_rows) * 100, 2);
+            $displayProgress = sprintf('%s/%s', $import->processed_rows ?? 0, $import->total_rows ?? 0);
+            $progresses[] = compact('percentageProcessedRows', 'displayProgress');
+        });
+
+        return view('livewire.progress-bar', compact('progresses', 'modelClass'));
     }
 }

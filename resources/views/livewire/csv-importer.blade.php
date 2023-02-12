@@ -88,7 +88,7 @@
                         </div>
 
                         {{-- csv-imports component goes here --}}
-                        <div x-show="isShowProgress" wire:key="{{$modelClass}}">
+                        <div wire:key="{{$modelClass}}">
                             <livewire:progress-bar :modelClass="$modelClass" wire:key="{{$modelClass}}"/>
                         </div>
 
@@ -106,8 +106,7 @@
                 isDrop: false,
                 uploadFile: (e) => {
                     @this.upload('csv', event.dataTransfer.files[0])
-                },
-                isShowProgress: false
+                }
             }
         }
     </script>
