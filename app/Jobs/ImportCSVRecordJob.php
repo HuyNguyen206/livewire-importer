@@ -10,6 +10,7 @@ use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 
 class ImportCSVRecordJob implements ShouldQueue
@@ -42,5 +43,10 @@ class ImportCSVRecordJob implements ShouldQueue
             $updatedData += ['completed_at' => now()];
         }
         $import->update($updatedData);
+    }
+
+    public function middleware()
+    {
+        return [(new WithoutOverlapping($this->import->id))->expireAfter(2)];
     }
 }

@@ -3,9 +3,11 @@
 namespace App\Http\Livewire;
 
 use App\Helper\ChunkIterator;
+use App\Jobs\ChunkAndDispatchCsvImportJob;
 use App\Jobs\ImportCSVRecordJob;
 use App\Models\Customer;
 use App\Models\Import;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -25,7 +27,7 @@ class CsvImporter extends Component
     public $columns = [];
     public $hasFilledData = false;
 
-    const REQUIRED_COLUMNS = ['id', 'email'];
+    const REQUIRED_COLUMNS = ['email', 'first_name', 'last_name'];
 
     public function render()
     {
@@ -50,7 +52,6 @@ class CsvImporter extends Component
 
         $this->columns = collect(Schema::getColumnListing('customers'))
             ->mapWithKeys(fn($column) => [$column => ''])
-            ->only(['id', 'first_name', 'last_name', 'email'])
             ->toArray();
     }
 
@@ -107,7 +108,8 @@ class CsvImporter extends Component
 
     public function import()
     {
-        $this->validate();
+        $validatedData = $this->validate();
+        $selectedColumns = collect($validatedData['columns'])->filter()->toArray();
         auth()->user()->imports()->create([
             'model' => $this->modelClass,
             'file_path' => $this->csv->getRealPath(),
@@ -116,16 +118,9 @@ class CsvImporter extends Component
             'processed_rows' => 0
         ]);
         $this->emitTo(ProgressBar::class, 'showProgressBar');
-        $chunkIterator = new ChunkIterator($this->csvRecords->getRecords(), 100);
+//        $chunkIterator = new ChunkIterator($this->csvRecords->getRecords(), 100);
         $import = Import::query()->where('model', $this->modelClass)->latest()->first();
-        foreach ($chunkIterator->get() as $chunk) {
-            $chunkData = collect($chunk)->map(function ($record){
-                unset($record['id']);
-                return $record;
-            })->toArray();
-            dispatch(new ImportCSVRecordJob($chunkData, $import));
-//            $batches[] = new ImportCSVRecordJob($chunkData, $import);
-        }
+        dispatch(new ChunkAndDispatchCsvImportJob($this->csv->getRealPath(), $import, $selectedColumns))->onQueue('long-running-queue');
         $this->reset(['hasFilledData', 'columns']);
 //        Bus::batch($batches)
 //            ->then(function () use ($import){

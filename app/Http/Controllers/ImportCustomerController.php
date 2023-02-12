@@ -17,6 +17,6 @@ class ImportCustomerController extends Controller
     {
         $customers = Customer::paginate(100);
         $modelClass = Customer::class;
-       return view('customer.index', compact('customers', 'modelClass'));
+        return view('customer.index', compact('customers', 'modelClass'));
     }
 }

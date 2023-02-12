@@ -12,7 +12,7 @@
                 <div class="p-6 text-gray-900">
                     @foreach($customers as $customer)
                         <div>
-                            {{$customer->id}}. {{$customer->name}}
+                            {{$customer->id}}. {{$customer->email}}
                         </div>
                     @endforeach
 
